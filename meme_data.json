@@ -1,0 +1,24 @@
+[
+  {
+    "id": "05374ce8-2987-4664-8a98-13ba354c3b20",
+    "username": "leema",
+    "text": "namaste",
+    "template": "gif1.gif",
+    "image_path": "templates/meme_05374ce8-2987-4664-8a98-13ba354c3b20.png",
+    "likes": [
+      "leema"
+    ],
+    "comments": [
+      "Hi"
+    ]
+  },
+  {
+    "id": "484167d3-cf77-4ec5-b6ba-b7b4e96ef5cb",
+    "username": "leema",
+    "text": "namaste",
+    "template": "gif1.gif",
+    "image_path": "templates/meme_484167d3-cf77-4ec5-b6ba-b7b4e96ef5cb.png",
+    "likes": [],
+    "comments": []
+  }
+]
