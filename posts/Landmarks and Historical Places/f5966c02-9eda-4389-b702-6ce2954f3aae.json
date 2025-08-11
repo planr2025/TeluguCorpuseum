@@ -1,0 +1,21 @@
+{
+    "id": "f5966c02-9eda-4389-b702-6ce2954f3aae",
+    "caption": "Sample Post 2 in Landmarks and Historical Places",
+    "description": "This is a dummy post 2 for Landmarks and Historical Places.",
+    "author": "Demo User",
+    "image": "recipe.jpg",
+    "section": "Landmarks and Historical Places",
+    "upvotes": 20,
+    "comments": [
+        {
+            "user": "UserA",
+            "text": "Nice!",
+            "reply": "Thanks!"
+        },
+        {
+            "user": "UserB",
+            "text": "Interesting.",
+            "reply": "Appreciated."
+        }
+    ]
+}

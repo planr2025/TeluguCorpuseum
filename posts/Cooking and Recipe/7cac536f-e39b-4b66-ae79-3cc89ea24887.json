@@ -1,0 +1,21 @@
+{
+    "id": "7cac536f-e39b-4b66-ae79-3cc89ea24887",
+    "caption": "Sample Post 1 in Cooking and Recipe",
+    "description": "This is a dummy post 1 for Cooking and Recipe.",
+    "author": "Demo User",
+    "image": "recipe.jpg",
+    "section": "Cooking and Recipe",
+    "upvotes": 10,
+    "comments": [
+        {
+            "user": "UserA",
+            "text": "Nice!",
+            "reply": "Thanks!"
+        },
+        {
+            "user": "UserB",
+            "text": "Interesting.",
+            "reply": "Appreciated."
+        }
+    ]
+}
