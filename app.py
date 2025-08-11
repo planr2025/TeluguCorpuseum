@@ -1,231 +1,196 @@
 import streamlit as st
-from auth import save_user, validate_user, user_exists
-import main
-import phonetictranslate
-import base64
 import os
+from PIL import Image, ImageDraw, ImageFont
+import uuid
+from pymongo import MongoClient
 
-# # Debug print current dir
-# st.write("Current directory:", os.getcwd())
+# MongoDB setup - replace connection string if needed
+client = MongoClient("mongodb://localhost:27017/")
+db = client["telugu_corpuseum"]
+memes_collection = db["memes"]
 
+st.set_page_config(page_title="Desi Meme Creator", layout="wide")
 
+# --- Paths ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_FOLDER = os.path.join(BASE_DIR, "templates")
+FONT_PATH = os.path.join(BASE_DIR, "arial.ttf")
+CSS_FILE = os.path.join(BASE_DIR, "style.css")
 
-def inject_custom_css():
-    
+# --- Load local CSS ---
+def local_css(file_name):
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-    def get_base64_of_file(filepath):
-        with open(filepath, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
+local_css(CSS_FILE)
 
-    image_path = "image/bg.webp"  # Make sure this path is correct relative to your app script
-    image_base64 = get_base64_of_file(image_path)
+# --- Functions ---
+def save_meme(image, username, text, template_name):
+    meme_id = str(uuid.uuid4())
+    path = os.path.join(TEMPLATE_FOLDER, f"meme_{meme_id}.png")
+    image.save(path)
 
-    css = f"""
-    <style>
-    html, body, [data-testid="stAppViewContainer"] {{
-        background: url("https://images.unsplash.com/photo-1503264116251-35a269479413?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        color: white !important;
-    }}
-    div[data-testid="stMarkdownContainer"] h1 span{{
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: #2c3e50;
-    display: flex;
-    align-items: center;
-    gap: 12px;  /* space between icon and text */
-    margin-bottom: 0;
-}}
-
-div[data-testid="StyledLinkIconContainer"] span {{
-    color: white; /* green */
-    font-weight: 700;
-}}
-    .main {{
-        padding:0px 10px;
-        border-radius: 10px;
-    }}
-
-    h1, h2, h3, .stRadio label, .stTextInput label {{
-        color: #222 !important;
-    }}
-
-    h1 {{
-    
-     background-color: rgba(0, 0, 0, 0.5) !important; /* black with 70% opacity */
-     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); /* drop shadow */
-     border-radius:10px;
-     padding: 30px 20px !important;
-     width :content;
-     margin: 0 auto;
-    }}
-    
-
-
-    # .stTextInput input, .stPassword input {{
-     
-    #     width: 70% !important;
-    #     margin-left: 15% !important;
-    # }}
-
-    button[kind="primary"] {{
-        background: linear-gradient(to right, #667eea, #764ba2);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1.5rem;
-        font-weight: bold;
-    }}
-
-    .stButton button:hover {{
-        opacity: 0.9;
-        cursor: pointer;
-    }}
-
-    div[data-baseweb="radio"] label {{
-        color: white !important;
-        font-weight: 500;
-    }}
-
-    div[data-testid="stMarkdownContainer"] > p {{
-        color: white;
-        font-weight: bold;
-        font-size: 18px;
-    }}
-
-    button[data-testid="baseButton-secondary"] {{
-        background-color: #007BFF !important;  
-        color: white !important;
-        border: none !important;
-        padding: 10px 20px !important;
-        border-radius: 8px !important;
-        font-weight: bold !important;
-        font-size: 16px !important;
-    }}
-
-    button[data-testid="baseButton-secondary"]:hover {{
-        background-color: #0056b3 !important;
-    }}
-
-    button[data-testid="baseButton-secondary"] p {{
-        color : white !important;
-    }}
-
-     div.stHeadingContainer h1 span {{
-                font-size: 40px !important;
-                font-weight: 800 !important;
-                color:white;
-                
-                text-align: center;
-                display: inline-block;
-            }}
-            
-            /* Center the whole title block */
-            div.stHeadingContainer h1 {{
-                text-align: center !important;
-            }}
-
-    .block-container{{
-    width: 100%;
-    max-width: 1200px;
-    }}
-
-    
-
-    </style>
-    """
-
-    st.markdown(css, unsafe_allow_html=True)
-
-    st.markdown("""
-    <style>
-    /* Paste CSS from above here */
-    div[data-baseweb="base-input"] {
-        
-        box-shadow: none !important;
-        # border: none !important;
-        #         width: 70% !important;
-        # margin-left: 15% !important;
+    meme_entry = {
+        "id": meme_id,
+        "username": username,
+        "text": text,
+        "template": template_name,
+        "image_path": path,
+        "likes": [],
+        "comments": []
     }
 
-   
+    # Insert into MongoDB
+    memes_collection.insert_one(meme_entry)
 
-    div[data-baseweb="input"] {
-     
-        width: 70% !important;
-        margin-left: 15% !important;
-    }
-                
-                label,span,button[kind="secondary"] {
-     
-        width: 70% !important;
-        margin-left: 15% !important;
-    }
 
-    
-    </style>
-    """, unsafe_allow_html=True)
+def generate_meme(template_path, text):
+    image = Image.open(template_path).convert("RGB")
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype(FONT_PATH, 30)
+    except:
+        font = ImageFont.load_default()
+    width, height = image.size
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (width - text_width) / 2
+    y = height - text_height - 10
+    draw.text((x, y), text, fill="white", font=font)
+    return image
 
-def login_page():
-    inject_custom_css()
+# --- UI ---
+st.title("🎭 Desi Meme Creator")
+tabs = st.tabs(["🖼️ Create Meme", "🔥 Meme Feed", "👤 My Posts"])
 
-    st.title("📝 Welcome to Telugu Corpuseum")
-   
-    with st.container():
-        
+# --- TAB 1: Create Meme ---
+with tabs[0]:
+    st.header("🖼️ Choose a Template and Create Meme")
+    section = st.radio("Choose Section", ["1️⃣ Select Template", "2️⃣ Edit & Post Meme"])
 
-        menu = ["Login", "Sign Up"]
-        choice = st.radio("Select Action", menu, horizontal=True)
+    if section == "1️⃣ Select Template":
+        st.subheader("🎬 Available Templates")
+        if os.path.exists(TEMPLATE_FOLDER):
+            template_files = [f for f in os.listdir(TEMPLATE_FOLDER) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))]
+            if template_files:
+                cols = st.columns(3)
+                for i, filename in enumerate(template_files):
+                    img_path = os.path.join(TEMPLATE_FOLDER, filename)
+                    try:
+                        img = Image.open(img_path)
+                        with cols[i % 3]:
+                            st.image(img, caption=filename, width=300)
+                            if st.button("Select", key=f"select_{i}"):
+                                st.session_state.selected_template = img_path
+                                st.success(f"✅ Selected: {filename}")
+                    except Exception as e:
+                        st.error(f"Error loading {filename}: {e}")
+            else:
+                st.warning("No templates found in the templates folder.")
+        else:
+            st.error("Templates folder not found!")
 
-        if choice == "Login":
-            st.subheader("🔐 Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
+    elif section == "2️⃣ Edit & Post Meme":
+        if "selected_template" not in st.session_state:
+            st.warning("⚠️ Please select a template in section 1 first.")
+        else:
+            img = Image.open(st.session_state.selected_template)
+            st.image(img, caption="Selected Template", width=300)
+            username = st.text_input("👤 Enter your username")
+            text = st.text_input("✏️ Enter meme text")
 
-            if st.button("Login"):
-                if validate_user(username, password):
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.experimental_rerun()
+            if st.button("🚀 Post Meme"):
+                if username and text:
+                    meme_img = generate_meme(st.session_state.selected_template, text)
+                    save_meme(meme_img, username, text, os.path.basename(st.session_state.selected_template))
+                    st.success("✅ Meme posted successfully!")
+                    del st.session_state.selected_template
                 else:
-                    st.error("Invalid username or password.")
+                    st.error("⚠️ Please fill in both username and text.")
 
-        elif choice == "Sign Up":
-            st.subheader("📝 Create Account")
-            username = st.text_input("Choose Username")
-            password = st.text_input("Choose Password", type="password")
+# --- TAB 2: Meme Feed ---
+with tabs[1]:
+    st.header("🔥 Meme Feed")
 
-            if st.button("Sign Up"):
-                if user_exists(username):
-                    st.warning("Username already taken.")
-                else:
-                    save_user(username, password)
-                    st.success("Account created. You can now log in.")
+    # Fetch fresh memes from MongoDB every time the tab renders
+    meme_data = list(memes_collection.find())
+    for meme in meme_data:
+        meme["_id"] = str(meme["_id"])
 
+    if meme_data:
+        for i in range(0, len(meme_data), 3):
+            cols = st.columns(3)
+            for j in range(3):
+                if i + j < len(meme_data):
+                    meme = meme_data[i + j]
+                    with cols[j]:
+                        if os.path.exists(meme["image_path"]):
+                            img = Image.open(meme["image_path"])
+                            st.image(img, caption=f"By @{meme['username']}", width=300)
+                        else:
+                            st.warning("⚠️ Meme image missing.")
+                        
+                        viewer_username = st.text_input("👤 Enter your username to like/comment", key=f"viewer_{meme['id']}")
 
+                        if st.button(f"👍 Like ({len(meme['likes'])})", key=f"like_{meme['id']}"):
+                            if not viewer_username.strip():
+                                st.warning("Please enter a username to like.")
+                            elif viewer_username in meme["likes"]:
+                                st.info("You already liked this meme!")
+                            else:
+                                memes_collection.update_one(
+                                    {"id": meme["id"]},
+                                    {"$push": {"likes": viewer_username}}
+                                )
+                                st.experimental_rerun()
 
-def main_app():
-    # st.sidebar.success(f"")
-    main.run()
+                        comment_key = f"comment_{meme['id']}"
 
-def phonetic_app():
-    phonetictranslate.run()
+                        # Clear comment box after post
+                        if st.session_state.get(f"clear_{comment_key}", False):
+                            st.session_state[comment_key] = ""
+                            st.session_state[f"clear_{comment_key}"] = False
 
-# --- App start ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+                        comment = st.text_input("💬 Comment", key=comment_key)
 
-if "view" not in st.session_state:
-    st.session_state.view = "main"
+                        if st.button("Post", key=f"post_comment_{meme['id']}"):
+                            if comment:
+                                memes_collection.update_one(
+                                    {"id": meme["id"]},
+                                    {"$push": {"comments": comment}}
+                                )
+                                # Flag to clear input after posting
+                                st.session_state[f"clear_{comment_key}"] = True
+                                st.experimental_rerun()
 
-if st.session_state.logged_in:
-    if st.session_state.view == 'main':
-        main_app()
+                        # Show comments below each meme
+                        if meme["comments"]:
+                            for c in meme["comments"]:
+                                st.markdown(f"🗨️ {c}")
     else:
-        phonetic_app()
-else:
-    login_page()
+        st.info("No memes yet. Be the first to post!")
+
+
+# --- TAB 3: My Posts ---
+with tabs[2]:
+    st.header("👤 My Posted Memes")
+    my_username = st.text_input("Enter your username to view your memes", key="my_username")
+    if my_username:
+        # Fetch user memes freshly from MongoDB
+        my_memes = list(memes_collection.find({"username": my_username}))
+        for meme in my_memes:
+            meme["_id"] = str(meme["_id"])
+
+        if my_memes:
+            cols = st.columns(3)
+            for i, meme in enumerate(my_memes):
+                with cols[i % 3]:
+                    if os.path.exists(meme["image_path"]):
+                        img = Image.open(meme["image_path"])
+                        st.image(img, caption=f"{meme['text']}", width=300)
+                    else:
+                        st.warning("⚠️ Meme image missing.")
+        else:
+            st.warning("No posts found for this user.")
