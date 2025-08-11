@@ -1,39 +1,34 @@
 import streamlit as st
 import os
-import json
 from PIL import Image, ImageDraw, ImageFont
 import uuid
+from pymongo import MongoClient
 
-# --- Constants ---
-TEMPLATE_FOLDER = "templates"
-DATA_FILE = "meme_data.json"
-FONT_PATH = "arial.ttf"
-
-# Load local CSS
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-local_css("style.css")
-
-
-# --- Page Config ---
+# MongoDB setup - replace connection string if needed
+client = MongoClient("mongodb://localhost:27017/")
+db = client["telugu_corpuseum"]
+memes_collection = db["memes"]
 
 st.set_page_config(page_title="Desi Meme Creator", layout="wide")
 
-# --- Ensure meme data file exists ---
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump([], f)
+# --- Paths ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_FOLDER = os.path.join(BASE_DIR, "templates")
+FONT_PATH = os.path.join(BASE_DIR, "arial.ttf")
+CSS_FILE = os.path.join(BASE_DIR, "style.css")
 
-# --- Load memes ---
-with open(DATA_FILE, "r") as f:
-    meme_data = json.load(f)
+# --- Load local CSS ---
+def local_css(file_name):
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+local_css(CSS_FILE)
 
 # --- Functions ---
 def save_meme(image, username, text, template_name):
     meme_id = str(uuid.uuid4())
-    path = f"templates/meme_{meme_id}.png"
+    path = os.path.join(TEMPLATE_FOLDER, f"meme_{meme_id}.png")
     image.save(path)
 
     meme_entry = {
@@ -46,9 +41,9 @@ def save_meme(image, username, text, template_name):
         "comments": []
     }
 
-    meme_data.append(meme_entry)
-    with open(DATA_FILE, "w") as f:
-        json.dump(meme_data, f, indent=2)
+    # Insert into MongoDB
+    memes_collection.insert_one(meme_entry)
+
 
 def generate_meme(template_path, text):
     image = Image.open(template_path).convert("RGB")
@@ -61,7 +56,6 @@ def generate_meme(template_path, text):
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
-
     x = (width - text_width) / 2
     y = height - text_height - 10
     draw.text((x, y), text, fill="white", font=font)
@@ -74,28 +68,36 @@ tabs = st.tabs(["🖼️ Create Meme", "🔥 Meme Feed", "👤 My Posts"])
 # --- TAB 1: Create Meme ---
 with tabs[0]:
     st.header("🖼️ Choose a Template and Create Meme")
-
     section = st.radio("Choose Section", ["1️⃣ Select Template", "2️⃣ Edit & Post Meme"])
 
-    # --- Section 1: Select Template ---
     if section == "1️⃣ Select Template":
         st.subheader("🎬 Available Templates")
-        template_files = [f for f in os.listdir(TEMPLATE_FOLDER) if f.endswith((".png", ".jpg", ".jpeg", ".gif"))]
-        cols = st.columns(3)
-        for i, filename in enumerate(template_files):
-            img_path = os.path.join(TEMPLATE_FOLDER, filename)
-            with cols[i % 3]:
-                st.image(img_path, caption=filename, use_container_width=True)
-                if st.button("Select", key=f"select_{i}"):
-                    st.session_state.selected_template = img_path
-                    st.success(f"✅ Selected: {filename}")
+        if os.path.exists(TEMPLATE_FOLDER):
+            template_files = [f for f in os.listdir(TEMPLATE_FOLDER) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))]
+            if template_files:
+                cols = st.columns(3)
+                for i, filename in enumerate(template_files):
+                    img_path = os.path.join(TEMPLATE_FOLDER, filename)
+                    try:
+                        img = Image.open(img_path)
+                        with cols[i % 3]:
+                            st.image(img, caption=filename, width=300)
+                            if st.button("Select", key=f"select_{i}"):
+                                st.session_state.selected_template = img_path
+                                st.success(f"✅ Selected: {filename}")
+                    except Exception as e:
+                        st.error(f"Error loading {filename}: {e}")
+            else:
+                st.warning("No templates found in the templates folder.")
+        else:
+            st.error("Templates folder not found!")
 
-    # --- Section 2: Edit Meme ---
     elif section == "2️⃣ Edit & Post Meme":
         if "selected_template" not in st.session_state:
             st.warning("⚠️ Please select a template in section 1 first.")
         else:
-            st.image(st.session_state.selected_template, caption="Selected Template", use_container_width=True)
+            img = Image.open(st.session_state.selected_template)
+            st.image(img, caption="Selected Template", width=300)
             username = st.text_input("👤 Enter your username")
             text = st.text_input("✏️ Enter meme text")
 
@@ -111,6 +113,12 @@ with tabs[0]:
 # --- TAB 2: Meme Feed ---
 with tabs[1]:
     st.header("🔥 Meme Feed")
+
+    # Fetch fresh memes from MongoDB every time the tab renders
+    meme_data = list(memes_collection.find())
+    for meme in meme_data:
+        meme["_id"] = str(meme["_id"])
+
     if meme_data:
         for i in range(0, len(meme_data), 3):
             cols = st.columns(3)
@@ -118,37 +126,71 @@ with tabs[1]:
                 if i + j < len(meme_data):
                     meme = meme_data[i + j]
                     with cols[j]:
-                        st.image(meme["image_path"], caption=f"By @{meme['username']}", use_container_width=True)
+                        if os.path.exists(meme["image_path"]):
+                            img = Image.open(meme["image_path"])
+                            st.image(img, caption=f"By @{meme['username']}", width=300)
+                        else:
+                            st.warning("⚠️ Meme image missing.")
+                        
+                        viewer_username = st.text_input("👤 Enter your username to like/comment", key=f"viewer_{meme['id']}")
+
                         if st.button(f"👍 Like ({len(meme['likes'])})", key=f"like_{meme['id']}"):
-                            user_id = st.session_state.get("user_id", meme["username"])
-                            if user_id not in meme["likes"]:
-                                meme["likes"].append(user_id)
-                                with open(DATA_FILE, "w") as f:
-                                    json.dump(meme_data, f, indent=2)
-                                st.rerun()
-                        comment = st.text_input("💬 Comment", key=f"comment_{meme['id']}")
+                            if not viewer_username.strip():
+                                st.warning("Please enter a username to like.")
+                            elif viewer_username in meme["likes"]:
+                                st.info("You already liked this meme!")
+                            else:
+                                memes_collection.update_one(
+                                    {"id": meme["id"]},
+                                    {"$push": {"likes": viewer_username}}
+                                )
+                                st.experimental_rerun()
+
+                        comment_key = f"comment_{meme['id']}"
+
+                        # Clear comment box after post
+                        if st.session_state.get(f"clear_{comment_key}", False):
+                            st.session_state[comment_key] = ""
+                            st.session_state[f"clear_{comment_key}"] = False
+
+                        comment = st.text_input("💬 Comment", key=comment_key)
+
                         if st.button("Post", key=f"post_comment_{meme['id']}"):
                             if comment:
-                                meme["comments"].append(comment)
-                                with open(DATA_FILE, "w") as f:
-                                    json.dump(meme_data, f, indent=2)
-                                st.rerun()
+                                memes_collection.update_one(
+                                    {"id": meme["id"]},
+                                    {"$push": {"comments": comment}}
+                                )
+                                # Flag to clear input after posting
+                                st.session_state[f"clear_{comment_key}"] = True
+                                st.experimental_rerun()
+
+                        # Show comments below each meme
                         if meme["comments"]:
                             for c in meme["comments"]:
                                 st.markdown(f"🗨️ {c}")
     else:
         st.info("No memes yet. Be the first to post!")
 
+
 # --- TAB 3: My Posts ---
 with tabs[2]:
     st.header("👤 My Posted Memes")
     my_username = st.text_input("Enter your username to view your memes", key="my_username")
     if my_username:
-        my_memes = [m for m in meme_data if m["username"] == my_username]
+        # Fetch user memes freshly from MongoDB
+        my_memes = list(memes_collection.find({"username": my_username}))
+        for meme in my_memes:
+            meme["_id"] = str(meme["_id"])
+
         if my_memes:
             cols = st.columns(3)
             for i, meme in enumerate(my_memes):
                 with cols[i % 3]:
-                    st.image(meme["image_path"], caption=f"{meme['text']}", use_container_width=True)
+                    if os.path.exists(meme["image_path"]):
+                        img = Image.open(meme["image_path"])
+                        st.image(img, caption=f"{meme['text']}", width=300)
+                    else:
+                        st.warning("⚠️ Meme image missing.")
         else:
             st.warning("No posts found for this user.")
