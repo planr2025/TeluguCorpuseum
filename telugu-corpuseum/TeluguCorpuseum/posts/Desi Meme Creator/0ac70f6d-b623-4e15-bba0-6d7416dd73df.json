@@ -1,0 +1,21 @@
+{
+    "id": "0ac70f6d-b623-4e15-bba0-6d7416dd73df",
+    "caption": "Sample Post 2 in Desi Meme Creator",
+    "description": "This is a dummy post 2 for Desi Meme Creator.",
+    "author": "Demo User",
+    "image": "recipe.jpg",
+    "section": "Desi Meme Creator",
+    "upvotes": 20,
+    "comments": [
+        {
+            "user": "UserA",
+            "text": "Nice!",
+            "reply": "Thanks!"
+        },
+        {
+            "user": "UserB",
+            "text": "Interesting.",
+            "reply": "Appreciated."
+        }
+    ]
+}
